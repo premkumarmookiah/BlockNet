@@ -153,6 +153,29 @@ void main() {
     expect(provider.blockedPackages, {'com.example.one', 'com.example.two'});
   });
 
+  test('blocks and unblocks applications in bulk', () async {
+    final updates = <Set<String>>[];
+    final provider = FirewallProvider(
+      updateBlockedPackages: (packageNames) async {
+        updates.add(Set<String>.from(packageNames));
+        return true;
+      },
+    );
+
+    await provider.setAppsBlocked(['com.example.one', 'com.example.two'], true);
+
+    expect(provider.blockedPackages, {'com.example.one', 'com.example.two'});
+    expect(updates.single, {'com.example.one', 'com.example.two'});
+
+    await provider.setAppsBlocked([
+      'com.example.one',
+      'com.example.two',
+    ], false);
+
+    expect(provider.blockedPackages, isEmpty);
+    expect(updates.last, isEmpty);
+  });
+
   test('rolls back blocked state when native update fails', () async {
     final provider = FirewallProvider(
       updateBlockedPackages: (_) =>
@@ -160,6 +183,18 @@ void main() {
     );
 
     await provider.setAppBlocked('com.example.target', true);
+
+    expect(provider.blockedPackages, isEmpty);
+    expect(provider.errorMessage, 'Unable to update blocked apps.');
+  });
+
+  test('rolls back bulk blocked state when native update fails', () async {
+    final provider = FirewallProvider(
+      updateBlockedPackages: (_) =>
+          Future<bool>.error(Exception('update failed')),
+    );
+
+    await provider.setAppsBlocked(['com.example.target'], true);
 
     expect(provider.blockedPackages, isEmpty);
     expect(provider.errorMessage, 'Unable to update blocked apps.');

@@ -150,6 +150,49 @@ class FirewallProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> setAppsBlocked(
+    Iterable<String> packageNames,
+    bool isBlocked,
+  ) async {
+    final normalizedPackages = packageNames
+        .map((packageName) => packageName.trim())
+        .where((packageName) => packageName.isNotEmpty)
+        .toSet();
+
+    if (normalizedPackages.isEmpty) {
+      _errorMessage = 'No apps available to update.';
+      notifyListeners();
+      return;
+    }
+
+    final previousPackages = Set<String>.from(_blockedPackages);
+    final nextPackages = Set<String>.from(_blockedPackages);
+    if (isBlocked) {
+      nextPackages.addAll(normalizedPackages);
+    } else {
+      nextPackages.removeAll(normalizedPackages);
+    }
+
+    if (setEquals(previousPackages, nextPackages)) {
+      return;
+    }
+
+    _blockedPackages = nextPackages;
+    _isUpdatingBlockedPackages = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _updateBlockedPackages(_blockedPackages);
+    } catch (_) {
+      _blockedPackages = previousPackages;
+      _errorMessage = 'Unable to update blocked apps.';
+    } finally {
+      _isUpdatingBlockedPackages = false;
+      notifyListeners();
+    }
+  }
+
   void clearError() {
     if (_errorMessage == null) {
       return;

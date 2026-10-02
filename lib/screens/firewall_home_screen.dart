@@ -41,7 +41,10 @@ class _FirewallHomeScreenState extends State<FirewallHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('BlockNet')),
+      appBar: AppBar(
+        title: const _FirewallAppBarTitle(),
+        actions: const [_FirewallSwitchAction()],
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: context.read<AppListProvider>().loadInstalledApps,
@@ -50,14 +53,12 @@ class _FirewallHomeScreenState extends State<FirewallHomeScreen> {
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const _FirewallStatusCard(),
-                      const SizedBox(height: 16),
                       _SearchField(controller: _searchController),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       _AppFilterChips(
                         selectedFilter: _filter,
                         onSelected: (filter) {
@@ -66,6 +67,7 @@ class _FirewallHomeScreenState extends State<FirewallHomeScreen> {
                           });
                         },
                       ),
+                      const _HeaderStatusLine(),
                     ],
                   ),
                 ),
@@ -73,6 +75,70 @@ class _FirewallHomeScreenState extends State<FirewallHomeScreen> {
               _InstalledAppList(filter: _filter),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FirewallAppBarTitle extends StatelessWidget {
+  const _FirewallAppBarTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    final firewall = context.watch<FirewallProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          firewall.isFirewallRunning ? Icons.shield : Icons.shield_outlined,
+          color: firewall.isFirewallRunning
+              ? colorScheme.primary
+              : colorScheme.onSurfaceVariant,
+          size: 22,
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('BlockNet'),
+              Text(
+                firewall.statusLabel,
+                key: const ValueKey('firewall-status-label'),
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FirewallSwitchAction extends StatelessWidget {
+  const _FirewallSwitchAction();
+
+  @override
+  Widget build(BuildContext context) {
+    final firewall = context.watch<FirewallProvider>();
+
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: 8),
+      child: Semantics(
+        label: 'firewall-master-switch',
+        child: Switch(
+          key: const ValueKey('firewall-master-switch'),
+          value: firewall.isFirewallRunning,
+          onChanged: firewall.isUpdatingFirewall
+              ? null
+              : firewall.setFirewallRunning,
         ),
       ),
     );
@@ -97,6 +163,16 @@ class _AppFilterChips extends StatelessWidget {
         .where((app) => firewall.isBlocked(app.packageName))
         .length;
     final allowedCount = apps.length - blockedCount;
+    final allLoadedPackages = appList.apps.map((app) => app.packageName);
+    final loadedAppCount = appList.apps.length;
+    final blockedLoadedCount = allLoadedPackages
+        .where(firewall.isBlocked)
+        .length;
+    final shouldBlockAll = blockedLoadedCount < loadedAppCount;
+    final bulkLabel = shouldBlockAll ? 'Block all' : 'Allow all';
+    final bulkIcon = shouldBlockAll ? Icons.block : Icons.check_circle_outline;
+    final canBulkUpdate =
+        loadedAppCount > 0 && !firewall.isUpdatingBlockedPackages;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -121,6 +197,22 @@ class _AppFilterChips extends StatelessWidget {
             count: allowedCount,
             isSelected: selectedFilter == AppFilter.allowed,
             onSelected: () => onSelected(AppFilter.allowed),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            key: const ValueKey('bulk-access-button'),
+            onPressed: canBulkUpdate
+                ? () =>
+                      firewall.setAppsBlocked(allLoadedPackages, shouldBlockAll)
+                : null,
+            icon: Icon(bulkIcon, size: 18),
+            label: Text(bulkLabel),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
           ),
         ],
       ),
@@ -148,76 +240,51 @@ class _FilterChip extends StatelessWidget {
       label: Text('$label $count'),
       selected: isSelected,
       onSelected: (_) => onSelected(),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 }
 
-class _FirewallStatusCard extends StatelessWidget {
-  const _FirewallStatusCard();
+class _HeaderStatusLine extends StatelessWidget {
+  const _HeaderStatusLine();
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FirewallProvider>(
-      builder: (context, firewall, _) {
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(
-                  firewall.isFirewallRunning
-                      ? Icons.shield
-                      : Icons.shield_outlined,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        firewall.statusLabel,
-                        key: const ValueKey('firewall-status-label'),
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${firewall.blockedPackages.length} apps blocked',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      if (firewall.errorMessage != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          firewall.errorMessage!,
-                          key: const ValueKey('firewall-error-message'),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Semantics(
-                  label: 'firewall-master-switch',
-                  child: Switch(
-                    key: const ValueKey('firewall-master-switch'),
-                    value: firewall.isFirewallRunning,
-                    onChanged: firewall.isUpdatingFirewall
-                        ? null
-                        : firewall.setFirewallRunning,
-                  ),
-                ),
-              ],
+    final appList = context.watch<AppListProvider>();
+    final firewall = context.watch<FirewallProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (appList.isRefreshing) ...[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            '${firewall.blockedPackages.length} apps blocked',
+            key: const ValueKey('blocked-count-label'),
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
             ),
           ),
-        );
-      },
+          if (firewall.errorMessage != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              firewall.errorMessage!,
+              key: const ValueKey('firewall-error-message'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colorScheme.error),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -245,9 +312,14 @@ class _SearchField extends StatelessWidget {
         key: const ValueKey('app-search-field'),
         controller: controller,
         textInputAction: TextInputAction.search,
+        style: Theme.of(context).textTheme.bodyMedium,
         decoration: InputDecoration(
           hintText: 'Search apps',
           prefixIcon: const Icon(Icons.search),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 42,
+            minHeight: 40,
+          ),
           suffixIcon: appList.searchQuery.isEmpty
               ? null
               : IconButton(
@@ -256,6 +328,12 @@ class _SearchField extends StatelessWidget {
                   icon: const Icon(Icons.close),
                   onPressed: appList.clearSearch,
                 ),
+          isDense: true,
+          constraints: const BoxConstraints(maxHeight: 48),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
           border: const OutlineInputBorder(
             borderRadius: BorderRadius.all(Radius.circular(8)),
           ),

@@ -125,6 +125,49 @@ void main() {
     expect(find.text('Maps'), findsOneWidget);
   });
 
+  testWidgets('bulk button blocks and allows every loaded app', (tester) async {
+    await tester.pumpWidget(_TestApp(loadApps: () async => [chrome, maps]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('bulk-access-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<Switch>(
+            find.byKey(const ValueKey('internet-switch-com.android.chrome')),
+          )
+          .value,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<Switch>(
+            find.byKey(
+              const ValueKey('internet-switch-com.google.android.apps.maps'),
+            ),
+          )
+          .value,
+      isFalse,
+    );
+    expect(find.text('2 apps blocked'), findsOneWidget);
+    expect(find.text('Allow all'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('bulk-access-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<Switch>(
+            find.byKey(const ValueKey('internet-switch-com.android.chrome')),
+          )
+          .value,
+      isTrue,
+    );
+    expect(find.text('0 apps blocked'), findsOneWidget);
+    expect(find.text('Block all'), findsOneWidget);
+  });
+
   testWidgets('shows empty state', (tester) async {
     await tester.pumpWidget(_TestApp(loadApps: () async => const []));
     await tester.pumpAndSettle();
