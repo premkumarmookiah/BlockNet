@@ -1,0 +1,70 @@
+import 'package:flutter/foundation.dart';
+
+import '../models/installed_app.dart';
+
+typedef InstalledAppLoader = Future<List<InstalledApp>> Function();
+
+class AppListProvider extends ChangeNotifier {
+  AppListProvider({required InstalledAppLoader appLoader})
+    : _loadApps = appLoader;
+
+  final InstalledAppLoader _loadApps;
+
+  List<InstalledApp> _apps = const [];
+  bool _isLoading = false;
+  String _searchQuery = '';
+  String? _errorMessage;
+
+  List<InstalledApp> get apps => List.unmodifiable(_apps);
+  bool get isLoading => _isLoading;
+  String get searchQuery => _searchQuery;
+  String? get errorMessage => _errorMessage;
+
+  List<InstalledApp> get filteredApps {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return apps;
+    }
+
+    return _apps
+        .where(
+          (app) =>
+              app.name.toLowerCase().contains(query) ||
+              app.packageName.toLowerCase().contains(query),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> loadInstalledApps() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final loadedApps = await _loadApps();
+      _apps = [...loadedApps]
+        ..sort(
+          (first, second) =>
+              first.name.toLowerCase().compareTo(second.name.toLowerCase()),
+        );
+    } catch (_) {
+      _apps = const [];
+      _errorMessage = 'Unable to load installed apps.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void setSearchQuery(String query) {
+    if (_searchQuery == query) {
+      return;
+    }
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  void clearSearch() {
+    setSearchQuery('');
+  }
+}
