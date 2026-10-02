@@ -28,10 +28,13 @@ class InstalledAppTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Switch(
-        key: ValueKey('internet-switch-${app.packageName}'),
-        value: isInternetAllowed,
-        onChanged: onAllowedChanged,
+      trailing: Semantics(
+        label: 'internet-switch-${app.packageName}',
+        child: Switch(
+          key: ValueKey('internet-switch-${app.packageName}'),
+          value: isInternetAllowed,
+          onChanged: onAllowedChanged,
+        ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );

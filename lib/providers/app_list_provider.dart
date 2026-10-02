@@ -12,11 +12,13 @@ class AppListProvider extends ChangeNotifier {
 
   List<InstalledApp> _apps = const [];
   bool _isLoading = false;
+  bool _isRefreshing = false;
   String _searchQuery = '';
   String? _errorMessage;
 
   List<InstalledApp> get apps => List.unmodifiable(_apps);
   bool get isLoading => _isLoading;
+  bool get isRefreshing => _isRefreshing;
   String get searchQuery => _searchQuery;
   String? get errorMessage => _errorMessage;
 
@@ -36,12 +38,17 @@ class AppListProvider extends ChangeNotifier {
   }
 
   Future<void> loadInstalledApps() async {
-    _isLoading = true;
+    final hasExistingApps = _apps.isNotEmpty;
+    if (hasExistingApps) {
+      _isRefreshing = true;
+    } else {
+      _isLoading = true;
+    }
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final loadedApps = await _loadApps();
+      final loadedApps = await _loadApps().timeout(const Duration(seconds: 12));
       _apps = [...loadedApps]
         ..sort(
           (first, second) =>
@@ -52,6 +59,7 @@ class AppListProvider extends ChangeNotifier {
       _errorMessage = 'Unable to load installed apps.';
     } finally {
       _isLoading = false;
+      _isRefreshing = false;
       notifyListeners();
     }
   }

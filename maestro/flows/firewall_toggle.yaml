@@ -1,0 +1,14 @@
+appId: com.blocknet.firewall
+---
+- launchApp
+- assertVisible: "BlockNet"
+- tapOn: "firewall-master-switch"
+- assertVisible:
+    text: "Allow|OK|Firewall active|VPN permission was not granted."
+    optional: true
+- tapOn:
+    text: "Allow|OK"
+    optional: true
+- assertVisible: "Firewall active"
+- tapOn: "firewall-master-switch"
+- assertVisible: "Firewall off"

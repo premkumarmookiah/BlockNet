@@ -1,6 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:internet_on_off/models/installed_app.dart';
-import 'package:internet_on_off/providers/app_list_provider.dart';
+import 'package:blocknet/models/installed_app.dart';
+import 'package:blocknet/providers/app_list_provider.dart';
 
 void main() {
   const chrome = InstalledApp(
@@ -86,4 +88,34 @@ void main() {
 
     expect(provider.apps, [maps]);
   });
+
+  test(
+    'refresh keeps existing apps visible while new load is pending',
+    () async {
+      final refreshCompleter = Completer<List<InstalledApp>>();
+      var calls = 0;
+      final provider = AppListProvider(
+        appLoader: () {
+          calls += 1;
+          if (calls == 1) {
+            return Future.value([chrome]);
+          }
+          return refreshCompleter.future;
+        },
+      );
+
+      await provider.loadInstalledApps();
+      final refresh = provider.loadInstalledApps();
+
+      expect(provider.apps, [chrome]);
+      expect(provider.isLoading, isFalse);
+      expect(provider.isRefreshing, isTrue);
+
+      refreshCompleter.complete([maps]);
+      await refresh;
+
+      expect(provider.apps, [maps]);
+      expect(provider.isRefreshing, isFalse);
+    },
+  );
 }

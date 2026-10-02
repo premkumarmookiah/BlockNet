@@ -1,0 +1,11 @@
+appId: com.blocknet.firewall
+---
+- launchApp
+- tapOn: "Search apps"
+- inputText: "chrome"
+- assertVisible:
+    text: "Chrome|No apps match your search"
+- tapOn:
+    text: "Clear search"
+    optional: true
+- assertVisible: "Search apps"

@@ -1,3 +1,3 @@
-# internet_on_off
+# blocknet
 
 A new Flutter project.

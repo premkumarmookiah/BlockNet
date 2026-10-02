@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:internet_on_off/models/installed_app.dart';
-import 'package:internet_on_off/providers/app_list_provider.dart';
-import 'package:internet_on_off/providers/firewall_provider.dart';
-import 'package:internet_on_off/screens/firewall_home_screen.dart';
+import 'package:blocknet/models/installed_app.dart';
+import 'package:blocknet/providers/app_list_provider.dart';
+import 'package:blocknet/providers/firewall_provider.dart';
+import 'package:blocknet/screens/firewall_home_screen.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -25,6 +25,9 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const ValueKey('apps-loading')), findsOneWidget);
+
+    pendingLoad.complete([chrome]);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('shows installed application list', (tester) async {
@@ -68,6 +71,21 @@ void main() {
     expect(find.text('Firewall active'), findsOneWidget);
   });
 
+  testWidgets('shows firewall error message', (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        loadApps: () async => [chrome],
+        firewallProvider: FirewallProvider(prepareVpn: () async => false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('firewall-master-switch')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('VPN permission was not granted.'), findsOneWidget);
+  });
+
   testWidgets('toggles application internet access', (tester) async {
     await tester.pumpWidget(_TestApp(loadApps: () async => [chrome]));
     await tester.pumpAndSettle();
@@ -83,6 +101,28 @@ void main() {
 
     expect(tester.widget<Switch>(appSwitch).value, isFalse);
     expect(find.text('1 apps blocked'), findsOneWidget);
+  });
+
+  testWidgets('filters by blocked and allowed apps', (tester) async {
+    await tester.pumpWidget(_TestApp(loadApps: () async => [chrome, maps]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('internet-switch-com.android.chrome')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('filter-blocked')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chrome'), findsOneWidget);
+    expect(find.text('Maps'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('filter-allowed')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chrome'), findsNothing);
+    expect(find.text('Maps'), findsOneWidget);
   });
 
   testWidgets('shows empty state', (tester) async {
@@ -118,9 +158,10 @@ void main() {
 }
 
 class _TestApp extends StatelessWidget {
-  const _TestApp({required this.loadApps});
+  const _TestApp({required this.loadApps, this.firewallProvider});
 
   final Future<List<InstalledApp>> Function() loadApps;
+  final FirewallProvider? firewallProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +170,9 @@ class _TestApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => AppListProvider(appLoader: loadApps),
         ),
-        ChangeNotifierProvider(create: (_) => FirewallProvider()),
+        ChangeNotifierProvider(
+          create: (_) => firewallProvider ?? FirewallProvider(),
+        ),
       ],
       child: MaterialApp(
         theme: ThemeData(

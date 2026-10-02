@@ -9,6 +9,8 @@ import '../providers/app_list_provider.dart';
 import '../providers/firewall_provider.dart';
 import '../widgets/installed_app_tile.dart';
 
+enum AppFilter { all, blocked, allowed }
+
 class FirewallHomeScreen extends StatefulWidget {
   const FirewallHomeScreen({super.key});
 
@@ -18,6 +20,7 @@ class FirewallHomeScreen extends StatefulWidget {
 
 class _FirewallHomeScreenState extends State<FirewallHomeScreen> {
   final TextEditingController _searchController = TextEditingController();
+  AppFilter _filter = AppFilter.all;
 
   @override
   void initState() {
@@ -38,7 +41,7 @@ class _FirewallHomeScreenState extends State<FirewallHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Internet Firewall')),
+      appBar: AppBar(title: const Text('BlockNet')),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: context.read<AppListProvider>().loadInstalledApps,
@@ -54,15 +57,97 @@ class _FirewallHomeScreenState extends State<FirewallHomeScreen> {
                       const _FirewallStatusCard(),
                       const SizedBox(height: 16),
                       _SearchField(controller: _searchController),
+                      const SizedBox(height: 12),
+                      _AppFilterChips(
+                        selectedFilter: _filter,
+                        onSelected: (filter) {
+                          setState(() {
+                            _filter = filter;
+                          });
+                        },
+                      ),
                     ],
                   ),
                 ),
               ),
-              const _InstalledAppList(),
+              _InstalledAppList(filter: _filter),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AppFilterChips extends StatelessWidget {
+  const _AppFilterChips({
+    required this.selectedFilter,
+    required this.onSelected,
+  });
+
+  final AppFilter selectedFilter;
+  final ValueChanged<AppFilter> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final appList = context.watch<AppListProvider>();
+    final firewall = context.watch<FirewallProvider>();
+    final apps = appList.filteredApps;
+    final blockedCount = apps
+        .where((app) => firewall.isBlocked(app.packageName))
+        .length;
+    final allowedCount = apps.length - blockedCount;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _FilterChip(
+            label: 'All',
+            count: apps.length,
+            isSelected: selectedFilter == AppFilter.all,
+            onSelected: () => onSelected(AppFilter.all),
+          ),
+          const SizedBox(width: 8),
+          _FilterChip(
+            label: 'Blocked',
+            count: blockedCount,
+            isSelected: selectedFilter == AppFilter.blocked,
+            onSelected: () => onSelected(AppFilter.blocked),
+          ),
+          const SizedBox(width: 8),
+          _FilterChip(
+            label: 'Allowed',
+            count: allowedCount,
+            isSelected: selectedFilter == AppFilter.allowed,
+            onSelected: () => onSelected(AppFilter.allowed),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.count,
+    required this.isSelected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final int count;
+  final bool isSelected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      key: ValueKey('filter-${label.toLowerCase()}'),
+      label: Text('$label $count'),
+      selected: isSelected,
+      onSelected: (_) => onSelected(),
     );
   }
 }
@@ -104,13 +189,29 @@ class _FirewallStatusCard extends StatelessWidget {
                         '${firewall.blockedPackages.length} apps blocked',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
+                      if (firewall.errorMessage != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          firewall.errorMessage!,
+                          key: const ValueKey('firewall-error-message'),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                Switch(
-                  key: const ValueKey('firewall-master-switch'),
-                  value: firewall.isFirewallRunning,
-                  onChanged: firewall.setFirewallRunning,
+                Semantics(
+                  label: 'firewall-master-switch',
+                  child: Switch(
+                    key: const ValueKey('firewall-master-switch'),
+                    value: firewall.isFirewallRunning,
+                    onChanged: firewall.isUpdatingFirewall
+                        ? null
+                        : firewall.setFirewallRunning,
+                  ),
                 ),
               ],
             ),
@@ -138,39 +239,44 @@ class _SearchField extends StatelessWidget {
       );
     }
 
-    return TextField(
-      key: const ValueKey('app-search-field'),
-      controller: controller,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: 'Search apps',
-        prefixIcon: const Icon(Icons.search),
-        suffixIcon: appList.searchQuery.isEmpty
-            ? null
-            : IconButton(
-                key: const ValueKey('clear-search-button'),
-                tooltip: 'Clear search',
-                icon: const Icon(Icons.close),
-                onPressed: appList.clearSearch,
-              ),
-        border: const OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+    return Semantics(
+      label: 'app-search-field',
+      child: TextField(
+        key: const ValueKey('app-search-field'),
+        controller: controller,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search apps',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: appList.searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  key: const ValueKey('clear-search-button'),
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.close),
+                  onPressed: appList.clearSearch,
+                ),
+          border: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
         ),
+        onChanged: appList.setSearchQuery,
       ),
-      onChanged: appList.setSearchQuery,
     );
   }
 }
 
 class _InstalledAppList extends StatelessWidget {
-  const _InstalledAppList();
+  const _InstalledAppList({required this.filter});
+
+  final AppFilter filter;
 
   @override
   Widget build(BuildContext context) {
     final appList = context.watch<AppListProvider>();
     final firewall = context.watch<FirewallProvider>();
 
-    if (appList.isLoading) {
+    if (appList.isLoading && appList.apps.isEmpty) {
       return const SliverFillRemaining(
         hasScrollBody: false,
         child: Center(
@@ -191,15 +297,21 @@ class _InstalledAppList extends StatelessWidget {
       );
     }
 
-    final apps = appList.filteredApps;
+    final apps = appList.filteredApps
+        .where((app) {
+          return switch (filter) {
+            AppFilter.all => true,
+            AppFilter.blocked => firewall.isBlocked(app.packageName),
+            AppFilter.allowed => firewall.isInternetAllowed(app.packageName),
+          };
+        })
+        .toList(growable: false);
     if (apps.isEmpty) {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: _MessageState(
           icon: Icons.apps_outlined,
-          title: appList.searchQuery.isEmpty
-              ? 'No launchable apps found'
-              : 'No apps match your search',
+          title: _emptyStateMessage(appList.searchQuery, filter),
         ),
       );
     }
@@ -213,13 +325,24 @@ class _InstalledAppList extends StatelessWidget {
           key: ValueKey('app-tile-${app.packageName}'),
           app: app,
           isInternetAllowed: firewall.isInternetAllowed(app.packageName),
-          onAllowedChanged: (isAllowed) {
-            firewall.setAppBlocked(app.packageName, !isAllowed);
+          onAllowedChanged: (isAllowed) async {
+            await firewall.setAppBlocked(app.packageName, !isAllowed);
           },
           iconBuilder: _buildIcon,
         );
       },
     );
+  }
+
+  String _emptyStateMessage(String searchQuery, AppFilter filter) {
+    if (searchQuery.isNotEmpty) {
+      return 'No apps match your search';
+    }
+    return switch (filter) {
+      AppFilter.all => 'No launchable apps found',
+      AppFilter.blocked => 'No blocked apps',
+      AppFilter.allowed => 'No allowed apps',
+    };
   }
 
   Widget _buildIcon(InstalledApp app) {

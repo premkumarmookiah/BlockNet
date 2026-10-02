@@ -34,4 +34,16 @@ class InstalledApp {
   Map<String, Object?> toMap() {
     return {'name': name, 'packageName': packageName, 'iconBase64': iconBase64};
   }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is InstalledApp &&
+            other.name == name &&
+            other.packageName == packageName &&
+            other.iconBase64 == iconBase64;
+  }
+
+  @override
+  int get hashCode => Object.hash(name, packageName, iconBase64);
 }

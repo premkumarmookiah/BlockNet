@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:internet_on_off/providers/firewall_provider.dart';
+import 'package:blocknet/providers/firewall_provider.dart';
 
 void main() {
   test('starts with firewall stopped and no blocked apps', () {
@@ -24,33 +24,151 @@ void main() {
     expect(provider.isFirewallRunning, isFalse);
   });
 
-  test('blocks and unblocks one application', () {
+  test('loads firewall status from native callback', () async {
+    final provider = FirewallProvider(getFirewallStatus: () async => true);
+
+    await provider.loadFirewallStatus();
+
+    expect(provider.isFirewallRunning, isTrue);
+    expect(provider.errorMessage, isNull);
+  });
+
+  test('sets error when firewall status loading fails', () async {
+    final provider = FirewallProvider(
+      getFirewallStatus: () => Future<bool>.error(Exception('status failed')),
+    );
+
+    await provider.loadFirewallStatus();
+
+    expect(provider.errorMessage, 'Unable to read firewall status.');
+  });
+
+  test('does not start firewall when VPN permission is rejected', () async {
+    var startCalls = 0;
+    final provider = FirewallProvider(
+      prepareVpn: () async => false,
+      startFirewall: () async {
+        startCalls += 1;
+        return true;
+      },
+    );
+
+    await provider.setFirewallRunning(true);
+
+    expect(startCalls, 0);
+    expect(provider.isFirewallRunning, isFalse);
+    expect(provider.errorMessage, 'VPN permission was not granted.');
+  });
+
+  test(
+    'does not start firewall when notification permission is rejected',
+    () async {
+      var startCalls = 0;
+      final provider = FirewallProvider(
+        prepareVpn: () async => true,
+        requestNotificationPermission: () async => false,
+        startFirewall: () async {
+          startCalls += 1;
+          return true;
+        },
+      );
+
+      await provider.setFirewallRunning(true);
+
+      expect(startCalls, 0);
+      expect(provider.isFirewallRunning, isFalse);
+      expect(
+        provider.errorMessage,
+        'Notification permission is required to show firewall status.',
+      );
+    },
+  );
+
+  test('sets error when firewall start fails', () async {
+    final provider = FirewallProvider(
+      prepareVpn: () async => true,
+      startFirewall: () => Future<bool>.error(Exception('start failed')),
+    );
+
+    await provider.setFirewallRunning(true);
+
+    expect(provider.isFirewallRunning, isFalse);
+    expect(provider.errorMessage, 'Unable to start firewall.');
+  });
+
+  test('sets error when firewall stop fails', () async {
+    final provider = FirewallProvider(
+      startFirewall: () async => true,
+      stopFirewall: () => Future<bool>.error(Exception('stop failed')),
+    );
+
+    await provider.setFirewallRunning(true);
+    await provider.setFirewallRunning(false);
+
+    expect(provider.isFirewallRunning, isTrue);
+    expect(provider.errorMessage, 'Unable to stop firewall.');
+  });
+
+  test('loads blocked applications from native callback', () async {
+    final provider = FirewallProvider(
+      getBlockedPackages: () async => {'com.example.saved'},
+    );
+
+    await provider.loadBlockedPackages();
+
+    expect(provider.blockedPackages, {'com.example.saved'});
+  });
+
+  test('sets error when blocked applications restore fails', () async {
+    final provider = FirewallProvider(
+      getBlockedPackages: () =>
+          Future<Set<String>>.error(Exception('restore failed')),
+    );
+
+    await provider.loadBlockedPackages();
+
+    expect(provider.errorMessage, 'Unable to restore blocked apps.');
+  });
+
+  test('blocks and unblocks one application', () async {
     final provider = FirewallProvider();
 
-    provider.setAppBlocked('com.example.target', true);
+    await provider.setAppBlocked('com.example.target', true);
 
     expect(provider.isBlocked('com.example.target'), isTrue);
     expect(provider.isInternetAllowed('com.example.target'), isFalse);
 
-    provider.setAppBlocked('com.example.target', false);
+    await provider.setAppBlocked('com.example.target', false);
 
     expect(provider.isBlocked('com.example.target'), isFalse);
     expect(provider.isInternetAllowed('com.example.target'), isTrue);
   });
 
-  test('supports blocking multiple applications', () {
+  test('supports blocking multiple applications', () async {
     final provider = FirewallProvider();
 
-    provider.setAppBlocked('com.example.one', true);
-    provider.setAppBlocked('com.example.two', true);
+    await provider.setAppBlocked('com.example.one', true);
+    await provider.setAppBlocked('com.example.two', true);
 
     expect(provider.blockedPackages, {'com.example.one', 'com.example.two'});
   });
 
-  test('rejects empty package names', () {
+  test('rolls back blocked state when native update fails', () async {
+    final provider = FirewallProvider(
+      updateBlockedPackages: (_) =>
+          Future<bool>.error(Exception('update failed')),
+    );
+
+    await provider.setAppBlocked('com.example.target', true);
+
+    expect(provider.blockedPackages, isEmpty);
+    expect(provider.errorMessage, 'Unable to update blocked apps.');
+  });
+
+  test('rejects empty package names', () async {
     final provider = FirewallProvider();
 
-    provider.setAppBlocked('   ', true);
+    await provider.setAppBlocked('   ', true);
 
     expect(provider.blockedPackages, isEmpty);
     expect(provider.errorMessage, 'Invalid package name.');

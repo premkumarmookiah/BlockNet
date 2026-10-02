@@ -1,0 +1,6 @@
+appId: com.blocknet.firewall
+---
+- launchApp
+- assertVisible: "BlockNet"
+- assertVisible: "Firewall off"
+- assertVisible: "Search apps"
