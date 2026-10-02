@@ -1,0 +1,18 @@
+appId: com.blocknet.firewall
+---
+- launchApp
+- assertVisible: "BlockNet"
+- tapOn: "Search apps"
+- inputText: "chrome"
+- tapOn:
+    text: "internet-switch-com.android.chrome"
+    optional: true
+- tapOn:
+    text: "Blocked"
+- tapOn:
+    text: "internet-switch-com.android.chrome"
+    optional: true
+- tapOn:
+    text: "Allowed"
+- assertVisible:
+    text: "Chrome|No allowed apps"
