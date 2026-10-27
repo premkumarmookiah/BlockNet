@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.Process
 import java.io.FileInputStream
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
@@ -105,6 +106,9 @@ class BasicFirewallVpnService : VpnService() {
             .setSession(config.sessionName)
             .setMtu(config.mtu)
             .addAddress(config.ipv4Address, config.ipv4PrefixLength)
+            // establish() is non-blocking by default. A blocking descriptor lets
+            // the packet thread sleep while no blocked traffic is available.
+            .setBlocking(true)
 
         val routedPackages = addBlockedAppsToVpn(builder, config.blockedPackageNames)
         if (routedPackages.isNotEmpty()) {
@@ -142,6 +146,7 @@ class BasicFirewallVpnService : VpnService() {
         }
 
         packetLoopThread = Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
             val buffer = ByteArray(PACKET_BUFFER_SIZE)
 
             try {
